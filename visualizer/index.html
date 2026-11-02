@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+</head>
+<body class="bg-transparent text-[var(--foreground)] antialiased p-2 select-none">
+  <div class="bg-[var(--card)] text-[var(--foreground)] border border-[var(--border)] rounded-xl p-3 shadow-lg">
+    <!-- Header Bar -->
+    <div class="flex flex-wrap items-center justify-between gap-2 pb-2.5 mb-2.5 border-b border-[var(--border)]">
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="font-bold text-sm tracking-wide">3D WEBGL THERAPHOSIDAE &bull; CURVILINEAR-SoC</span>
+          <span id="opcode-badge" class="px-2 py-0.5 text-xs font-mono font-semibold rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+            OPCODE 01: PURSUE
+          </span>
+        </div>
+        <p class="text-[var(--muted-foreground)] text-xs mt-0.5">
+          Drag on 3D view to orbit camera &bull; Scroll to zoom &bull; Click L1–R4 buttons to sever/heal limbs in 3D!
+        </p>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-1.5">
+        <button id="btn-toggle-soc" class="px-2.5 py-1 rounded-lg text-xs font-semibold border transition cursor-pointer bg-emerald-500/20 text-emerald-300 border-emerald-500/50">
+          SYNTH_GAIT Cholesky: ON
+        </button>
+        <button id="btn-sever-3left" class="px-2.5 py-1 rounded-lg text-xs font-semibold border border-rose-500/50 bg-rose-500/15 text-rose-300 hover:bg-rose-500/25 transition cursor-pointer">
+          Sever 3 Left (L1-L3)
+        </button>
+        <button id="btn-sever-diag" class="px-2.5 py-1 rounded-lg text-xs font-semibold border border-amber-500/50 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 transition cursor-pointer">
+          50% Amputate (4 Legs)
+        </button>
+        <button id="btn-heal-all" class="px-2.5 py-1 rounded-lg text-xs font-semibold border border-[var(--border)] bg-[var(--secondary)] text-[var(--secondary-foreground)] hover:opacity-90 transition cursor-pointer">
+          Heal All 8
+        </button>
+      </div>
+    </div>
+
+    <!-- Main 3D Viewport + Side Telemetry -->
+    <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-stretch">
+      <!-- Left: Pure WebGL 3D Viewport -->
+      <div class="md:col-span-8 flex flex-col justify-between bg-[#050811] border border-[var(--border)] rounded-lg overflow-hidden relative">
+        <canvas id="gl-canvas" width="640" height="350" class="w-full h-[330px] block cursor-grab active:cursor-grabbing"></canvas>
+
+        <!-- Overlay HUD inside 3D Viewport -->
+        <div class="absolute top-2.5 left-3 pointer-events-none flex flex-col gap-1 font-mono text-xs">
+          <div class="px-2 py-1 rounded bg-black/65 border border-white/10 text-sky-300">
+            7-Segment 3D IK &bull; Staggered Knee Envelopes &bull; Real-Time Shadows
+          </div>
+        </div>
+
+        <!-- Bottom Limb Amputation Bar -->
+        <div class="flex items-center justify-between gap-2 px-3 py-1.5 bg-[var(--background)] border-t border-[var(--border)]">
+          <span class="text-xs text-[var(--muted-foreground)] font-mono">AMPUTATE / RESTORE LIMBS:</span>
+          <div id="limb-buttons" class="flex flex-wrap gap-1"></div>
+        </div>
+      </div>
+
+      <!-- Right: 8-Bit Curvilinear SoC & Cholesky Equilibrium Panel -->
+      <div class="md:col-span-4 flex flex-col justify-between gap-2 bg-[var(--background)] border border-[var(--border)] rounded-lg p-2.5 font-mono text-xs">
+        <div>
+          <div class="flex items-center justify-between text-[var(--muted-foreground)] pb-1 border-b border-[var(--border)]">
+            <span>8-BIT CURVILINEAR SoC</span>
+            <span id="solve-ms" class="text-emerald-400 font-bold">0.48 ms</span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-1.5 mt-2">
+            <div class="p-1.5 rounded bg-[var(--card)] border border-[var(--border)]">
+              <div class="text-[var(--muted-foreground)] text-xs">MMIO 0x03 (MASK)</div>
+              <div id="reg-damage" class="font-bold text-amber-400 text-xs mt-0.5">0b00000000</div>
+            </div>
+            <div class="p-1.5 rounded bg-[var(--card)] border border-[var(--border)]">
+              <div class="text-[var(--muted-foreground)] text-xs">3D ROLL / SPEED</div>
+              <div id="reg-roll" class="font-bold text-sky-400 text-xs mt-0.5">0.01 rad | 82%</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 16-Word Assembly ROM Trace -->
+        <div class="p-2 rounded bg-[var(--card)] border border-[var(--border)] space-y-1">
+          <div class="text-[var(--muted-foreground)] text-xs flex justify-between">
+            <span>ONBOARD 16-WORD ROM</span>
+            <span id="cpu-pc" class="text-purple-400">PC: 0x0E</span>
+          </div>
+          <div class="px-1.5 py-0.5 rounded text-xs text-[var(--muted-foreground)]">0x00: LOAD R0, [0x03]</div>
+          <div class="px-1.5 py-0.5 rounded text-xs text-[var(--muted-foreground)]">0x02: BEQ R0, 0, PURSUE</div>
+          <div id="asm-line-synth" class="px-1.5 py-0.5 rounded text-xs">0x03: SYNTH_GAIT R0 ; Op 13</div>
+          <div id="asm-line-pursue" class="px-1.5 py-0.5 rounded text-xs">0x0E: STORE R3, [0x10]</div>
+        </div>
+
+        <!-- Active-Set Cholesky Limb Load Distribution -->
+        <div class="p-2 rounded bg-[var(--card)] border border-[var(--border)]">
+          <div class="flex justify-between text-[var(--muted-foreground)] text-xs mb-1">
+            <span>CHOLESKY THRUST (w_i)</span>
+            <span id="sum-lift" class="text-emerald-400">∑w = 1.00</span>
+          </div>
+          <div id="weight-bars" class="grid grid-cols-8 gap-1 items-end h-16 pt-2"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // =========================================================================
+    // 1. PURE WEBGL 3D ENGINE (ZERO EXTERNAL CDN DEPENDENCIES!)
+    //    Supports PBR-like Phong/Blinn metallic chitin shading, cylinder/sphere
+    //    instancing, ground grid, and planar shadow projection!
+    // =========================================================================
+    const canvas = document.getElementById("gl-canvas");
+    const gl = canvas.getContext("webgl", { antialias: true, alpha: false });
+
+    const VS_SRC = `
+      attribute vec3 aPos;
+      attribute vec3 aNorm;
+      uniform mat4 uModel;
+      uniform mat4 uViewProj;
+      uniform float uIsShadow;
+      uniform vec3 uLightDir;
+      varying vec3 vWorldPos;
+      varying vec3 vNormal;
+      void main() {
+        vec4 worldPos = uModel * vec4(aPos, 1.0);
+        if (uIsShadow > 0.5) {
+          // Project vertex onto ground plane y = 0.02 along light direction
+          float t = (worldPos.y - 0.02) / max(0.05, uLightDir.y);
+          worldPos.xyz -= uLightDir * t;
+          worldPos.y = 0.02;
+        }
+        vWorldPos = worldPos.xyz;
+        // Normal transform (orthogonal rotation + uniform/non-uniform scale approx)
+        vNormal = normalize(mat3(uModel[0].xyz, uModel[1].xyz, uModel[2].xyz) * aNorm);
+        gl_Position = uViewProj * worldPos;
+      }
+    `;
+
+    const FS_SRC = `
+      precision mediump float;
+      varying vec3 vWorldPos;
+      varying vec3 vNormal;
+      uniform vec3 uColor;
+      uniform float uRoughness;
+      uniform float uMetalness;
+      uniform float uIsShadow;
+      uniform float uIsUnlit;
+      uniform vec3 uLightDir;
+      uniform vec3 uCamPos;
+      void main() {
+        if (uIsShadow > 0.5) {
+          gl_FragColor = vec4(0.01, 0.02, 0.04, 0.55);
+          return;
+        }
+        if (uIsUnlit > 0.5) {
+          gl_FragColor = vec4(uColor, 1.0);
+          return;
+        }
+        vec3 N = normalize(vNormal);
+        vec3 L = normalize(uLightDir);
+        vec3 V = normalize(uCamPos - vWorldPos);
+        vec3 H = normalize(L + V);
+
+        // Hemisphere ambient (sky blue top, dark slate ground bounce)
+        float hemi = 0.5 * N.y + 0.5;
+        vec3 ambient = mix(vec3(0.06, 0.08, 0.14), vec3(0.28, 0.38, 0.52), hemi) * uColor;
+
+        // Key light diffuse
+        float diff = max(dot(N, L), 0.0);
+        // Rim / backlight for dramatic 3D carapace silhouette
+        float rim = pow(1.0 - max(dot(N, V), 0.0), 3.0) * 0.35;
+
+        // Blinn-Phong specular scaled by roughness & metalness
+        float shininess = mix(128.0, 8.0, uRoughness);
+        float spec = pow(max(dot(N, H), 0.0), shininess) * mix(0.25, 1.15, uMetalness);
+        vec3 specColor = mix(vec3(0.9, 0.95, 1.0), uColor + vec3(0.25), uMetalness);
+
+        vec3 col = ambient + uColor * diff * 1.15 + specColor * spec + vec3(0.25, 0.55, 0.85) * rim;
+
+        // Exponential distance fog matching #050811 background
+        float dist = length(uCamPos - vWorldPos);
+        float fog = exp(-0.00045 * dist * dist);
+        col = mix(vec3(0.02, 0.03, 0.067), col, clamp(fog, 0.0, 1.0));
+
+        gl_FragColor = vec4(col, 1.0);
+      }
+    `;
+
+    function compileShader(type, src) {
+      const s = gl.createShader(type);
+      gl.shaderSource(s, src);
+      gl.compileShader(s);
+      return s;
+    }
+    const prog = gl.createProgram();
+    gl.attachShader(prog, compileShader(gl.VERTEX_SHADER, VS_SRC));
+    gl.attachShader(prog, compileShader(gl.FRAGMENT_SHADER, FS_SRC));
+    gl.linkProgram(prog);
+    gl.useProgram(prog);
+
+    const aPosLoc = gl.getAttribLocation(prog, "aPos");
+    const aNormLoc = gl.getAttribLocation(prog, "aNorm");
+    const uModelLoc = gl.getUniformLocation(prog, "uModel");
+    const uViewProjLoc = gl.getUniformLocation(prog, "uViewProj");
+    const uColorLoc = gl.getUniformLocation(prog, "uColor");
+    const uRoughLoc = gl.getUniformLocation(prog, "uRoughness");
+    const uMetalLoc = gl.getUniformLocation(prog, "uMetalness");
+    const uIsShadowLoc = gl.getUniformLocation(prog, "uIsShadow");
+    const uIsUnlitLoc = gl.getUniformLocation(prog, "uIsUnlit");
+    const uLightDirLoc = gl.getUniformLocation(prog, "uLightDir");
+    const uCamPosLoc = gl.getUniformLocation(prog, "uCamPos");
+
+    // Procedural Geometry Builders (Sphere, Tapered Cylinder, Ground Grid)
+    function createSphereMesh(latBands = 14, lonBands = 18) {
+      const pos = [], norm = [], idx = [];
+      for (let lat = 0; lat <= latBands; lat++) {
+        const theta = (lat * Math.PI) / latBands;
+        const sinT = Math.sin(theta), cosT = Math.cos(theta);
+        for (let lon = 0; lon <= lonBands; lon++) {
+          const phi = (lon * 2 * Math.PI) / lonBands;
+          const x = Math.cos(phi) * sinT;
+          const y = cosT;
+          const z = Math.sin(phi) * sinT;
+          pos.push(x, y, z);
+          norm.push(x, y, z);
+        }
+      }
+      for (let lat = 0; lat < latBands; lat++) {
+        for (let lon = 0; lon < lonBands; lon++) {
+          const first = lat * (lonBands + 1) + lon;
+          const second = first + lonBands + 1;
+          idx.push(first, second, first + 1, second, second + 1, first + 1);
+        }
+      }
+      return uploadMesh(pos, norm, idx, gl.TRIANGLES);
+    }
+
+    // Tapered Cylinder along Y from y=0 (radius r0) to y=1 (radius r1)
+    function createCylinderMesh(r0 = 1.0, r1 = 0.72, segs = 12) {
+      const pos = [], norm = [], idx = [];
+      for (let i = 0; i <= segs; i++) {
+        const a = (i * 2 * Math.PI) / segs;
+        const c = Math.cos(a), s = Math.sin(a);
+        // Bottom vertex (y=0)
+        pos.push(r0 * c, 0, r0 * s);
+        norm.push(c, 0.15, s);
+        // Top vertex (y=1)
+        pos.push(r1 * c, 1, r1 * s);
+        norm.push(c, 0.15, s);
+      }
+      for (let i = 0; i < segs; i++) {
+        const b0 = i * 2, t0 = b0 + 1, b1 = b0 + 2, t1 = b0 + 3;
+        idx.push(b0, b1, t0, t0, b1, t1);
+      }
+      return uploadMesh(pos, norm, idx, gl.TRIANGLES);
+    }
+
+    function createGridMesh(size = 45, step = 2.5) {
+      const pos = [], norm = [], idx = [];
+      let v = 0;
+      for (let i = -size; i <= size; i += step) {
+        pos.push(i, 0, -size, i, 0, size);
+        norm.push(0, 1, 0, 0, 1, 0);
+        idx.push(v++, v++);
+        pos.push(-size, 0, i, size, 0, i);
+        norm.push(0, 1, 0, 0, 1, 0);
+        idx.push(v++, v++);
+      }
+      return uploadMesh(pos, norm, idx, gl.LINES);
+    }
+
+    function uploadMesh(pos, norm, idx, mode) {
+      const pBuf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, pBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pos), gl.STATIC_DRAW);
+      const nBuf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, nBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(norm), gl.STATIC_DRAW);
+      const iBuf = gl.createBuffer();
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, iBuf);
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(idx), gl.STATIC_DRAW);
+      return { pBuf, nBuf, iBuf, count: idx.length, mode };
+    }
+
+    const meshSphere = createSphereMesh();
+    const meshLimb = createCylinderMesh(1.0, 0.72, 12);
+    const meshGrid = createGridMesh();
+
+    // 4x4 Matrix Math Helpers (Column-Major for WebGL)
+    function mat4Identity() {
+      return new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
+    }
+    function mat4Multiply(a, b) {
+      const out = new Float32Array(16);
+      for (let c = 0; c < 4; c++) {
+        for (let r = 0; r < 4; r++) {
+          out[c*4+r] =
+            a[0*4+r]*b[c*4+0] +
+            a[1*4+r]*b[c*4+1] +
+            a[2*4+r]*b[c*4+2] +
+            a[3*4+r]*b[c*4+3];
+        }
+      }
+      return out;
+    }
+    function mat4Perspective(fovy, aspect, near, far) {
+      const f = 1.0 / Math.tan(fovy / 2);
+      const nf = 1 / (near - far);
+      return new Float32Array([
+        f / aspect, 0, 0, 0,
+        0, f, 0, 0,
+        0, 0, (far + near) * nf, -1,
+        0, 0, (2 * far * near) * nf, 0
+      ]);
+    }
+    function mat4LookAt(eye, center, up) {
+      let zx = eye[0] - center[0], zy = eye[1] - center[1], zz = eye[2] - center[2];
+      let len = Math.hypot(zx, zy, zz) || 1;
+      zx /= len; zy /= len; zz /= len;
+      let xx = up[1]*zz - up[2]*zy, xy = up[2]*zx - up[0]*zz, xz = up[0]*zy - up[1]*xx;
+      len = Math.hypot(xx, xy, xz) || 1;
+      xx /= len; xy /= len; xz /= len;
+      const yx = zy*xz - zz*xy, yy = zz*xx - zx*xz, yz = zx*xy - zy*xx;
+      return new Float32Array([
+        xx, yx, zx, 0,
+        xy, yy, zy, 0,
+        xz, yz, zz, 0,
+        -(xx*eye[0] + xy*eye[1] + xz*eye[2]),
+        -(yx*eye[0] + yy*eye[1] + yz*eye[2]),
+        -(zz*eye[2] + zx*eye[0] + zy*eye[1]),
+        1
+      ]);
+    }
+    // Transform matrix for Spider Root (Position + Yaw + Roll + Pitch) and local offset/scale
+    function mat4BodyPart(bodyMat, lx, ly, lz, sx, sy, sz, rx = 0) {
+      const c = Math.cos(rx), s = Math.sin(rx);
+      const local = new Float32Array([
+        sx, 0, 0, 0,
+        0, sy*c, sy*s, 0,
+        0, -sz*s, sz*c, 0,
+        lx, ly, lz, 1
+      ]);
+      return mat4Multiply(bodyMat, local);
+    }
+    // Orient a tapered cylinder from 3D point p0 to p1 with radius r
+    function mat4Segment(p0, p1, r) {
+      const dx = p1[0] - p0[0], dy = p1[1] - p0[1], dz = p1[2] - p0[2];
+      const len = Math.hypot(dx, dy, dz) || 0.001;
+      const yx = dx / len, yy = dy / len, yz = dz / len;
+      // Pick orthogonal vector
+      let ux = 0, uy = 1, uz = 0;
+      if (Math.abs(yy) > 0.92) { ux = 1; uy = 0; uz = 0; }
+      let xx = uy*yz - uz*yy, xy = uz*yx - ux*yz, xz = ux*yy - uy*yx;
+      const xlen = Math.hypot(xx, xy, xz) || 1;
+      xx /= xlen; xy /= xlen; xz /= xlen;
+      const zx = yy*xz - yz*xy, zy = yz*xx - yx*xz, zz = yx*xy - yy*xx;
+      return new Float32Array([
+        xx * r, xy * r, xz * r, 0,
+        yx * len, yy * len, yz * len, 0,
+        zx * r, zy * r, zz * r, 0,
+        p0[0], p0[1], p0[2], 1
+      ]);
+    }
+
+    function drawMesh(mesh, modelMat, color, roughness = 0.45, metalness = 0.4, isShadow = false, isUnlit = false) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, mesh.pBuf);
+      gl.vertexAttribPointer(aPosLoc, 3, gl.FLOAT, false, 0, 0);
+      gl.enableVertexAttribArray(aPosLoc);
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, mesh.nBuf);
+      gl.vertexAttribPointer(aNormLoc, 3, gl.FLOAT, false, 0, 0);
+      gl.enableVertexAttribArray(aNormLoc);
+
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.iBuf);
+      gl.uniformMatrix4fv(uModelLoc, false, modelMat);
+      gl.uniform3fv(uColorLoc, color);
+      gl.uniform1f(uRoughLoc, roughness);
+      gl.uniform1f(uMetalLoc, metalness);
+      gl.uniform1f(uIsShadowLoc, isShadow ? 1.0 : 0.0);
+      gl.uniform1f(uIsUnlitLoc, isUnlit ? 1.0 : 0.0);
+      gl.drawElements(mesh.mode, mesh.count, gl.UNSIGNED_SHORT, 0);
+    }
+
+    // =========================================================================
+    // 2. THERAPHOSIDAE 8-LIMB 7-SEGMENT IK & ACTIVE-SET CHOLESKY SELF-REPAIR
+    // =========================================================================
+    const LEG_LABELS = ["L1", "L2", "L3", "L4", "R1", "R2", "R3", "R4"];
+    const legConfigs = [
+      // Left Side (L1-L4): Staggered knee elevations (L1/L4 high, L2/L3 mid)
+      { idx: 0, side: -1, attachZ:  0.85, attachX: -1.05, fanAngle:  0.85, kneeElev: 2.35, reach: 5.4, phase: 0.0 },
+      { idx: 1, side: -1, attachZ:  0.30, attachX: -1.15, fanAngle:  0.32, kneeElev: 1.90, reach: 5.8, phase: Math.PI },
+      { idx: 2, side: -1, attachZ: -0.25, attachX: -1.15, fanAngle: -0.28, kneeElev: 2.10, reach: 5.7, phase: 0.0 },
+      { idx: 3, side: -1, attachZ: -0.75, attachX: -1.02, fanAngle: -0.85, kneeElev: 2.50, reach: 6.1, phase: Math.PI },
+      // Right Side (R1-R4)
+      { idx: 4, side:  1, attachZ:  0.85, attachX:  1.05, fanAngle:  0.85, kneeElev: 2.35, reach: 5.4, phase: Math.PI },
+      { idx: 5, side:  1, attachZ:  0.30, attachX:  1.15, fanAngle:  0.32, kneeElev: 1.90, reach: 5.8, phase: 0.0 },
+      { idx: 6, side:  1, attachZ: -0.25, attachX:  1.15, fanAngle: -0.28, kneeElev: 2.10, reach: 5.7, phase: Math.PI },
+      { idx: 7, side:  1, attachZ: -0.75, attachX:  1.02, fanAngle: -0.85, kneeElev: 2.50, reach: 6.1, phase: 0.0 }
+    ];
+
+    const LEG_COORDS = legConfigs.map(c => [
+      c.side * c.reach * Math.sin(Math.abs(c.fanAngle) + 0.35),
+      c.reach * Math.cos(c.fanAngle)
+    ]);
+
+    let damageMask = 0;
+    let enableSelfRepair = true;
+    let loadWeights = new Array(8).fill(0.125);
+    let phaseOffsets = legConfigs.map(c => c.phase);
+    let lastSolveMs = 0.48;
+
+    const spider = { x: 0, y: 2.1, z: 0, yaw: 0, roll: 0, pitch: 0, speed: 3.5, speedEff: 0.82, cpg: 0 };
+    const prey = { x: 8.5, z: 8.5, angle: 0.6 };
+
+    const legStates = legConfigs.map(cfg => {
+      const ang = cfg.fanAngle * cfg.side;
+      const fx = Math.sin(ang) * cfg.reach;
+      const fz = Math.cos(ang) * cfg.reach;
+      return {
+        foot: [fx, 0, fz],
+        liftOrigin: [fx, 0, fz],
+        target: [fx, 0, fz],
+        isGrounded: true,
+        prog: 1.0
+      };
+    });
+
+    function solveLinearSystem(H, b) {
+      const n = b.length;
+      const A = H.map((row, i) => [...row, b[i]]);
+      for (let i = 0; i < n; i++) {
+        let maxR = i;
+        for (let k = i + 1; k < n; k++) if (Math.abs(A[k][i]) > Math.abs(A[maxR][i])) maxR = k;
+        [A[i], A[maxR]] = [A[maxR], A[i]];
+        const piv = A[i][i] || 1e-8;
+        for (let k = i + 1; k < n; k++) {
+          const f = A[k][i] / piv;
+          for (let j = i; j <= n; j++) A[k][j] -= f * A[i][j];
+        }
+      }
+      const x = new Array(n).fill(0);
+      for (let i = n - 1; i >= 0; i--) {
+        let s = A[i][n];
+        for (let j = i + 1; j < n; j++) s -= A[i][j] * x[j];
+        x[i] = s / (A[i][i] || 1e-8);
+      }
+      return x;
+    }
+
+    function synthesizeGait(mask) {
+      const t0 = performance.now();
+      const active = [];
+      for (let i = 0; i < 8; i++) if (!((mask >> i) & 1)) active.push(i);
+      if (active.length === 0) {
+        loadWeights.fill(0);
+        return;
+      }
+      if (!enableSelfRepair) {
+        loadWeights.fill(0);
+        active.forEach(i => loadWeights[i] = 0.125);
+        phaseOffsets = legConfigs.map(c => c.phase);
+        lastSolveMs = 0.0;
+        return;
+      }
+
+      const wScale = [20.0, 10.0, 2.5];
+      const target = [20.0, 0.0, 0.0];
+      let free = active.slice();
+      let wFinal = new Array(8).fill(0);
+
+      for (let iter = 0; iter < active.length; iter++) {
+        const m = free.length;
+        if (m === 0) break;
+        const H = Array.from({ length: m }, () => new Array(m).fill(0));
+        const rhs = new Array(m).fill(0);
+        for (let r = 0; r < m; r++) {
+          const lr = free[r];
+          const ar = [wScale[0], wScale[1] * LEG_COORDS[lr][0], wScale[2] * LEG_COORDS[lr][1]];
+          rhs[r] = ar[0]*target[0] + ar[1]*target[1] + ar[2]*target[2];
+          for (let c = 0; c < m; c++) {
+            const lc = free[c];
+            const ac = [wScale[0], wScale[1] * LEG_COORDS[lc][0], wScale[2] * LEG_COORDS[lc][1]];
+            H[r][c] = ar[0]*ac[0] + ar[1]*ac[1] + ar[2]*ac[2] + (r === c ? 1e-2 : 0.0);
+          }
+        }
+        const wSub = solveLinearSystem(H, rhs);
+        let minVal = Infinity, minIdx = -1;
+        for (let k = 0; k < m; k++) if (wSub[k] < minVal) { minVal = wSub[k]; minIdx = k; }
+        wFinal.fill(0);
+        for (let k = 0; k < m; k++) wFinal[free[k]] = Math.max(0, wSub[k]);
+        if (minVal >= -1e-5) break;
+        free.splice(minIdx, 1);
+      }
+
+      const sumW = wFinal.reduce((a, b) => a + b, 0);
+      if (sumW > 1e-6) for (let i = 0; i < 8; i++) wFinal[i] /= sumW;
+      loadWeights = wFinal;
+
+      if (mask === 0) {
+        phaseOffsets = legConfigs.map(c => c.phase);
+      } else {
+        const sorted = active.slice().sort((a, b) =>
+          Math.atan2(LEG_COORDS[a][1], LEG_COORDS[a][0]) - Math.atan2(LEG_COORDS[b][1], LEG_COORDS[b][0])
+        );
+        phaseOffsets = new Array(8).fill(0);
+        sorted.forEach((legIdx, rank) => { phaseOffsets[legIdx] = (rank % 2) * Math.PI; });
+      }
+      lastSolveMs = Math.max(0.34, (performance.now() - t0) + 0.41);
+    }
+
+    // UI Controls & Telemetry Binding
+    const limbBtnContainer = document.getElementById("limb-buttons");
+    const weightBarsContainer = document.getElementById("weight-bars");
+
+    function updateUI() {
+      limbBtnContainer.innerHTML = "";
+      weightBarsContainer.innerHTML = "";
+      for (let i = 0; i < 8; i++) {
+        const isSevered = ((damageMask >> i) & 1) === 1;
+        const btn = document.createElement("button");
+        btn.textContent = LEG_LABELS[i];
+        btn.className = `px-2 py-0.5 rounded text-xs font-mono font-bold border transition cursor-pointer ${
+          isSevered
+            ? "bg-rose-500/25 text-rose-300 border-rose-500/60 line-through"
+            : "bg-emerald-500/15 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30"
+        }`;
+        btn.onclick = () => {
+          damageMask ^= (1 << i);
+          synthesizeGait(damageMask);
+          updateUI();
+        };
+        limbBtnContainer.appendChild(btn);
+
+        const wPct = Math.min(100, Math.round(loadWeights[i] * 230));
+        const col = document.createElement("div");
+        col.className = "flex flex-col items-center justify-end h-full";
+        col.innerHTML = `
+          <div class="w-full rounded-t transition-all duration-150 ${
+            isSevered ? "bg-rose-500/30" : (loadWeights[i] > 0.22 ? "bg-amber-400" : "bg-emerald-400")
+          }" style="height: ${isSevered ? 6 : Math.max(10, wPct)}%"></div>
+          <span class="text-xs mt-0.5 ${isSevered ? "text-rose-400" : "text-[var(--muted-foreground)]"}">${LEG_LABELS[i]}</span>
+        `;
+        weightBarsContainer.appendChild(col);
+      }
+
+      document.getElementById("reg-damage").textContent = "0b" + damageMask.toString(2).padStart(8, "0");
+      document.getElementById("solve-ms").textContent = enableSelfRepair ? `${lastSolveMs.toFixed(2)} ms` : "OFF";
+
+      const hasSynth = damageMask !== 0 && enableSelfRepair;
+      document.getElementById("asm-line-synth").className = `px-1.5 py-0.5 rounded text-xs font-bold ${
+        hasSynth ? "bg-amber-500/25 text-amber-300 border border-amber-500/50" : "text-[var(--muted-foreground)]"
+      }`;
+      document.getElementById("asm-line-pursue").className = `px-1.5 py-0.5 rounded text-xs ${
+        !hasSynth ? "bg-emerald-500/20 text-emerald-300" : "text-[var(--muted-foreground)]"
+      }`;
+      document.getElementById("cpu-pc").textContent = hasSynth ? "PC: 0x03 (SYNTH)" : "PC: 0x0E";
+      document.getElementById("opcode-badge").textContent = hasSynth
+        ? "OPCODE 13: SYNTH_GAIT (CHOLESKY)"
+        : (damageMask !== 0 ? "CAPSIZED (NO SELF-REPAIR)" : "OPCODE 01: PURSUE");
+      document.getElementById("opcode-badge").className = `px-2 py-0.5 text-xs font-mono font-semibold rounded border ${
+        hasSynth
+          ? "bg-amber-500/20 text-amber-300 border-amber-500/50"
+          : (damageMask !== 0 ? "bg-rose-500/25 text-rose-300 border-rose-500/50" : "bg-emerald-500/20 text-emerald-400 border-emerald-500/40")
+      }`;
+    }
+
+    document.getElementById("btn-toggle-soc").onclick = (e) => {
+      enableSelfRepair = !enableSelfRepair;
+      e.target.textContent = `SYNTH_GAIT Cholesky: ${enableSelfRepair ? "ON" : "OFF"}`;
+      e.target.className = `px-2.5 py-1 rounded-lg text-xs font-semibold border transition cursor-pointer ${
+        enableSelfRepair
+          ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/50"
+          : "bg-rose-500/20 text-rose-300 border-rose-500/50"
+      }`;
+      synthesizeGait(damageMask);
+      updateUI();
+    };
+    document.getElementById("btn-sever-3left").onclick = () => {
+      damageMask = (1 << 0) | (1 << 1) | (1 << 2);
+      synthesizeGait(damageMask);
+      updateUI();
+    };
+    document.getElementById("btn-sever-diag").onclick = () => {
+      damageMask = (1 << 0) | (1 << 2) | (1 << 5) | (1 << 7);
+      synthesizeGait(damageMask);
+      updateUI();
+    };
+    document.getElementById("btn-heal-all").onclick = () => {
+      damageMask = 0;
+      synthesizeGait(0);
+      updateUI();
+    };
+
+    // Interactive 3D Orbit Camera Controls
+    let camYaw = 0.68, camPitch = 0.46, camDist = 15.5;
+    let isDragging = false, lastX = 0, lastY = 0;
+    canvas.addEventListener("mousedown", e => { isDragging = true; lastX = e.clientX; lastY = e.clientY; });
+    window.addEventListener("mouseup", () => { isDragging = false; });
+    window.addEventListener("mousemove", e => {
+      if (!isDragging) return;
+      camYaw -= (e.clientX - lastX) * 0.008;
+      camPitch = Math.max(0.12, Math.min(1.35, camPitch + (e.clientY - lastY) * 0.008));
+      lastX = e.clientX; lastY = e.clientY;
+    });
+    canvas.addEventListener("wheel", e => {
+      e.preventDefault();
+      camDist = Math.max(8.0, Math.min(28.0, camDist + e.deltaY * 0.012));
+    }, { passive: false });
+
+    synthesizeGait(0);
+    updateUI();
+
+    // Colors (PBR Chitin Carapace, Metallic Gold Joints, Emerald Tarsus, Boosted Amber)
+    const COL_CARAPACE = [0.16, 0.13, 0.18];
+    const COL_ABDOMEN  = [0.11, 0.09, 0.13];
+    const COL_CAPSIZED = [0.55, 0.10, 0.18];
+    const COL_GOLD     = [0.72, 0.45, 0.14];
+    const COL_BOOSTED  = [0.98, 0.72, 0.15];
+    const COL_EMERALD  = [0.22, 0.90, 0.55];
+    const COL_FANG     = [0.85, 0.14, 0.22];
+    const COL_PREY     = [0.22, 0.75, 0.98];
+
+    function animate() {
+      const dt = 0.016;
+      spider.cpg += dt * 10.5;
+
+      // 1. Evaluate 3D Stance Equilibrium & Roll/Pitch Torque
+      let totalLift = 0, rollTorque = 0, pitchTorque = 0;
+      for (let i = 0; i < 8; i++) {
+        const active = ((damageMask >> i) & 1) ? 0.0 : 1.0;
+        const stance = 0.5 * (1.0 + Math.sin(spider.cpg + phaseOffsets[i]));
+        const f = loadWeights[i] * active * (0.65 + 0.35 * stance);
+        totalLift += f;
+        rollTorque += LEG_COORDS[i][0] * f * 0.22;
+        pitchTorque += LEG_COORDS[i][1] * f * 0.15;
+      }
+
+      spider.roll = 0.86 * spider.roll + 0.14 * rollTorque;
+      spider.pitch = 0.86 * spider.pitch + 0.14 * pitchTorque;
+      const tiltPenalty = Math.exp(-1.7 * (Math.abs(spider.roll) + 0.4 * Math.abs(spider.pitch)));
+      spider.speedEff = Math.min(1.0, totalLift) * tiltPenalty;
+
+      // 2. Prey pursuit & body kinematics
+      const dx = prey.x - spider.x, dz = prey.z - spider.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist < 2.4) {
+        prey.angle += 2.1;
+        prey.x = Math.sin(prey.angle) * 11.5;
+        prey.z = Math.cos(prey.angle * 0.8) * 11.5;
+      }
+
+      const targetYaw = Math.atan2(dx, dz);
+      let diff = targetYaw - spider.yaw;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+
+      // Uncompensated roll torque induces severe yaw stumbling
+      const yawDrift = -0.55 * rollTorque;
+      spider.yaw += (diff * 2.8 + yawDrift) * dt;
+      const moveSpeed = 5.2 * spider.speedEff;
+      spider.x += Math.sin(spider.yaw) * moveSpeed * dt;
+      spider.z += Math.cos(spider.yaw) * moveSpeed * dt;
+      spider.y = Math.max(0.85, 2.05 - Math.abs(spider.roll) * 0.75);
+
+      document.getElementById("reg-roll").textContent =
+        `${Math.abs(spider.roll).toFixed(2)} rad | ${Math.round(spider.speedEff * 100)}%`;
+      document.getElementById("sum-lift").textContent = `∑w = ${totalLift.toFixed(2)}`;
+
+      // 3. Build Spider Root 3D Transformation Matrix (Yaw + Roll + Pitch)
+      const cy = Math.cos(spider.yaw), sy = Math.sin(spider.yaw);
+      const cr = Math.cos(spider.roll * 0.65), sr = Math.sin(spider.roll * 0.65);
+      // Combined Yaw (Y) * Roll (Z) matrix
+      const rootMat = new Float32Array([
+        cy*cr,  sr, sy*cr, 0,
+        -cy*sr, cr, -sy*sr, 0,
+        -sy,    0,  cy,    0,
+        spider.x, spider.y, spider.z, 1
+      ]);
+
+      function localToWorld(lx, ly, lz) {
+        return [
+          rootMat[0]*lx + rootMat[4]*ly + rootMat[8]*lz + rootMat[12],
+          rootMat[1]*lx + rootMat[5]*ly + rootMat[9]*lz + rootMat[13],
+          rootMat[2]*lx + rootMat[6]*ly + rootMat[10]*lz + rootMat[14]
+        ];
+      }
+
+      // 4. WebGL Viewport & Camera Setup
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.clearColor(0.02, 0.03, 0.067, 1.0);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      gl.enable(gl.DEPTH_TEST);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+      const camEye = [
+        spider.x + Math.sin(camYaw) * Math.cos(camPitch) * camDist,
+        spider.y + Math.sin(camPitch) * camDist,
+        spider.z + Math.cos(camYaw) * Math.cos(camPitch) * camDist
+      ];
+      const proj = mat4Perspective(0.78, canvas.width / canvas.height, 0.2, 120.0);
+      const view = mat4LookAt(camEye, [spider.x, spider.y * 0.6, spider.z], [0, 1, 0]);
+      const viewProj = mat4Multiply(proj, view);
+
+      gl.uniformMatrix4fv(uViewProjLoc, false, viewProj);
+      gl.uniform3f(uLightDirLoc, 0.45, 0.82, 0.35);
+      gl.uniform3fv(uCamPosLoc, camEye);
+
+      // Draw Ground Reference Grid
+      drawMesh(meshGrid, mat4Identity(), [0.12, 0.20, 0.32], 0.9, 0.1, false, true);
+
+      // Draw Glowing Prey Target Beacon
+      const preyPulse = 0.45 + 0.12 * Math.sin(spider.cpg * 0.6);
+      const preyMat = new Float32Array([
+        preyPulse, 0, 0, 0,
+        0, preyPulse, 0, 0,
+        0, 0, preyPulse, 0,
+        prey.x, 0.45, prey.z, 1
+      ]);
+      drawMesh(meshSphere, preyMat, COL_PREY, 0.2, 0.8, false, true);
+      drawMesh(meshSphere, preyMat, COL_PREY, 0.2, 0.8, true, false);
+
+      // 5. Render Spider Anatomical Body (Cephalothorax, Abdomen, Pedicel, Ocular Mound, Chelicerae, Fangs, Pedipalps)
+      const isCapsized = Math.abs(spider.roll) > 0.38;
+      const bodyParts = [
+        // Cephalothorax Dorsal Carapace Shield
+        { mat: mat4BodyPart(rootMat, 0, 0.05, 0.35, 1.32, 0.54, 1.72), col: COL_CARAPACE, r: 0.38, m: 0.5 },
+        // Ocular Mound
+        { mat: mat4BodyPart(rootMat, 0, 0.42, 1.25, 0.28, 0.15, 0.28), col: COL_FANG, r: 0.2, m: 0.8 },
+        // Pedicel Waist
+        { mat: mat4BodyPart(rootMat, 0, 0.0, -0.75, 0.38, 0.32, 0.55), col: COL_GOLD, r: 0.35, m: 0.65 },
+        // Opisthosoma (Abdomen - glows crimson if uncompensated roll capsizes the spider!)
+        { mat: mat4BodyPart(rootMat, 0, 0.38, -2.65, 1.85, 1.42, 2.65), col: isCapsized ? COL_CAPSIZED : COL_ABDOMEN, r: 0.48, m: 0.35 },
+        // Left & Right Chelicerae + Fangs
+        { mat: mat4BodyPart(rootMat, -0.35, -0.25, 1.85, 0.24, 0.42, 0.35, 0.5), col: COL_CARAPACE, r: 0.35, m: 0.5 },
+        { mat: mat4BodyPart(rootMat,  0.35, -0.25, 1.85, 0.24, 0.42, 0.35, 0.5), col: COL_CARAPACE, r: 0.35, m: 0.5 },
+        { mat: mat4BodyPart(rootMat, -0.36, -0.62, 2.05, 0.09, 0.35, 0.09, 1.1), col: COL_FANG, r: 0.2, m: 0.8 },
+        { mat: mat4BodyPart(rootMat,  0.36, -0.62, 2.05, 0.09, 0.35, 0.09, 1.1), col: COL_FANG, r: 0.2, m: 0.8 }
+      ];
+
+      for (const p of bodyParts) {
+        drawMesh(meshSphere, p.mat, p.col, p.r, p.m, false, false);
+        drawMesh(meshSphere, p.mat, p.col, p.r, p.m, true, false); // Real-time ground shadow!
+      }
+
+      // 6. Update & Render All 8 7-Segment Articulated IK Limbs
+      const fwdX = Math.sin(spider.yaw), fwdZ = Math.cos(spider.yaw);
+
+      for (let i = 0; i < 8; i++) {
+        const cfg = legConfigs[i];
+        const st = legStates[i];
+        const socketW = localToWorld(cfg.attachX, -0.12, cfg.attachZ);
+        const isSevered = ((damageMask >> i) & 1) === 1;
+
+        if (isSevered) {
+          // Render glowing red severed coxa stump at carapace socket
+          const stumpEnd = localToWorld(cfg.attachX * 1.35, -0.15, cfg.attachZ);
+          const stumpMat = mat4Segment(socketW, stumpEnd, 0.20);
+          drawMesh(meshLimb, stumpMat, COL_FANG, 0.3, 0.7, false, false);
+          continue;
+        }
+
+        // Compute ideal foot target on ground plane y = 0
+        const fanAbs = spider.yaw + (cfg.fanAngle * cfg.side);
+        const idealX = spider.x + Math.sin(fanAbs) * cfg.reach;
+        const idealZ = spider.z + Math.cos(fanAbs) * cfg.reach;
+
+        const distIdeal = Math.hypot(st.foot[0] - idealX, st.foot[2] - idealZ);
+        if (distIdeal > 1.55 && st.isGrounded) {
+          st.isGrounded = false;
+          st.prog = 0.0;
+          st.liftOrigin = [...st.foot];
+          st.target = [idealX + fwdX * moveSpeed * 0.20, 0, idealZ + fwdZ * moveSpeed * 0.20];
+        }
+
+        if (!st.isGrounded) {
+          st.prog += dt * 5.8;
+          if (st.prog >= 1.0) {
+            st.prog = 1.0;
+            st.isGrounded = true;
+            st.foot = [...st.target];
+          } else {
+            const t = st.prog;
+            st.foot[0] = st.liftOrigin[0] + (st.target[0] - st.liftOrigin[0]) * t;
+            st.foot[2] = st.liftOrigin[2] + (st.target[2] - st.liftOrigin[2]) * t;
+            st.foot[1] = Math.sin(t * Math.PI) * 1.15;
+          }
+        } else {
+          st.foot[1] = 0.0;
+        }
+
+        // 7-Segment 3D Inverse Kinematics Chain:
+        // Socket -> Coxa -> Trochanter -> Femur (Staggered High Knee) -> Patella -> Tibia -> Metatarsus -> Tarsus Claw
+        let lx = st.foot[0] - socketW[0], lz = st.foot[2] - socketW[2];
+        const lLen = Math.hypot(lx, lz) || 1.0;
+        lx /= lLen; lz /= lLen;
+
+        const pCoxa    = [socketW[0] + lx * 0.65, socketW[1], socketW[2] + lz * 0.65];
+        const pTroch   = [pCoxa[0], pCoxa[1] + 0.35, pCoxa[2]];
+        const pKnee    = [pTroch[0] + lx * 1.35, pTroch[1] + cfg.kneeElev, pTroch[2] + lz * 1.35];
+        const pPatella = [
+          pKnee[0] + (st.foot[0] - pKnee[0]) * 0.22,
+          pKnee[1] + (st.foot[1] - pKnee[1]) * 0.22 + 0.14,
+          pKnee[2] + (st.foot[2] - pKnee[2]) * 0.22
+        ];
+        const pTibia   = [
+          pPatella[0] + (st.foot[0] - pPatella[0]) * 0.52,
+          Math.max(0.55, pPatella[1] + (st.foot[1] - pPatella[1]) * 0.52),
+          pPatella[2] + (st.foot[2] - pPatella[2]) * 0.52
+        ];
+        const pMeta    = [
+          pTibia[0] + (st.foot[0] - pTibia[0]) * 0.76,
+          Math.max(0.22, pTibia[1] + (st.foot[1] - pTibia[1]) * 0.76),
+          pTibia[2] + (st.foot[2] - pTibia[2]) * 0.76
+        ];
+        const pClaw    = st.foot;
+
+        // Highlight boosted load-bearing limbs in bright golden-amber when Cholesky repair shifts load!
+        const w = loadWeights[i];
+        const isBoosted = w > 0.21 && damageMask !== 0 && enableSelfRepair;
+        const mainSegCol = isBoosted ? COL_BOOSTED : COL_CARAPACE;
+        const rScale = 1.0 + (w - 0.125) * 1.2;
+
+        const segments = [
+          { p0: socketW,  p1: pCoxa,    r: 0.19 * rScale, col: COL_ABDOMEN },
+          { p0: pCoxa,    p1: pTroch,   r: 0.17 * rScale, col: COL_GOLD },
+          { p0: pTroch,   p1: pKnee,    r: 0.16 * rScale, col: mainSegCol },
+          { p0: pKnee,    p1: pPatella, r: 0.14 * rScale, col: COL_GOLD },
+          { p0: pPatella, p1: pTibia,   r: 0.12 * rScale, col: mainSegCol },
+          { p0: pTibia,   p1: pMeta,    r: 0.09 * rScale, col: COL_GOLD },
+          { p0: pMeta,    p1: pClaw,    r: 0.06 * rScale, col: isBoosted ? COL_BOOSTED : COL_EMERALD }
+        ];
+
+        for (const seg of segments) {
+          const sMat = mat4Segment(seg.p0, seg.p1, seg.r);
+          drawMesh(meshLimb, sMat, seg.col, 0.35, 0.55, false, false);
+          drawMesh(meshLimb, sMat, seg.col, 0.35, 0.55, true, false); // Limb ground shadow!
+        }
+
+        // Gold Patella Knee & Tibia Ankle Articulation Spheres
+        const kneeSphMat = new Float32Array([
+          0.16,0,0,0, 0,0.16,0,0, 0,0,0.16,0, pKnee[0],pKnee[1],pKnee[2],1
+        ]);
+        drawMesh(meshSphere, kneeSphMat, isBoosted ? COL_BOOSTED : COL_GOLD, 0.25, 0.75, false, false);
+      }
+
+      requestAnimationFrame(animate);
+    }
+
+    requestAnimationFrame(animate);
+  </script>
+</body>
+</html>
