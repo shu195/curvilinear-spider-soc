@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "curvilinear-spider-soc"
+version = "0.1.0"
+description = "8-Legged Biomechanical Theraphosidae Arachnid driven by a Zero-Branching Curvilinear Von Neumann SoC with Sub-Millisecond Cholesky Gait Self-Repair"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [
+    {name = "shu195"}
+]
+dependencies = [
+    "numpy>=1.22.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["curvilinear_spider*"]
